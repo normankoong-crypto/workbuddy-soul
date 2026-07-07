@@ -17,14 +17,13 @@ SOUL_FILES=("SOUL.md" "IDENTITY.md" "USER.md" "MEMORY.md")
 for file in "${SOUL_FILES[@]}"; do
     dest="$SOURCE_DIR/$file"
     python3 -c "
-import urllib.request, os, sys
+import urllib.request, os, sys, shutil
 url = '$RAW_BASE/$file'
 dest = '$dest'
 try:
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     with urllib.request.urlopen(req, timeout=10) as r:
-        content = r.read()
-    remote = content.decode('utf-8', errors='replace')
+        remote = r.read().decode('utf-8', errors='replace')
     local = ''
     if os.path.exists(dest):
         with open(dest, 'r', encoding='utf-8', errors='replace') as f:
@@ -32,9 +31,14 @@ try:
     if local == remote:
         print(f'  无变化: $file')
     else:
-        with open(dest, 'w', encoding='utf-8') as f:
+        # 原子写入：先写 .tmp，备份旧文件，再 rename
+        tmp = dest + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
             f.write(remote)
-        print(f'  已更新: $file')
+        if os.path.exists(dest) and os.path.getsize(dest) > 0:
+            shutil.copy2(dest, dest + '.bak')
+        os.replace(tmp, dest)
+        print(f'  已更新: $file (.bak 已备份)')
         sys.exit(2)
 except Exception as e:
     print(f'  [SKIP] $file — {e}')
@@ -73,7 +77,7 @@ except Exception as e:
 
 echo "[3/4] 拉取项目记忆..."
 python3 -c "
-import urllib.request, os, sys, tempfile, tarfile, json
+import urllib.request, os, sys, shutil, tempfile, tarfile, json
 
 raw_base = '$RAW_BASE'
 repo_dir = '$REPO_DIR'
@@ -126,8 +130,13 @@ try:
                 with open(dst_file, 'r', encoding='utf-8', errors='replace') as df:
                     local = df.read()
             if content != local:
-                with open(dst_file, 'w', encoding='utf-8') as df:
+                # 备份旧文件，再原子写入
+                tmp = dst_file + '.tmp'
+                with open(tmp, 'w', encoding='utf-8') as df:
                     df.write(content)
+                if os.path.exists(dst_file) and os.path.getsize(dst_file) > 0:
+                    shutil.copy2(dst_file, dst_file + '.bak')
+                os.replace(tmp, dst_file)
                 restored += 1
         if restored > 0:
             print(f'  已恢复: {proj_name} ({restored} 个文件)')
@@ -147,7 +156,7 @@ except Exception as e:
 
 echo "[4/4] 拉取仓库脚本更新..."
 python3 -c "
-import urllib.request, os, sys
+import urllib.request, os, sys, shutil
 
 raw_base = '$RAW_BASE'
 repo_dir = '$REPO_DIR'
@@ -165,8 +174,13 @@ for s in scripts:
             with open(dest, 'r', encoding='utf-8', errors='replace') as f:
                 local = f.read()
         if local != remote:
-            with open(dest, 'w', encoding='utf-8') as f:
+            # 备份旧脚本，再原子写入
+            tmp = dest + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
                 f.write(remote)
+            if os.path.exists(dest) and os.path.getsize(dest) > 0:
+                shutil.copy2(dest, dest + '.bak')
+            os.replace(tmp, dest)
             os.chmod(dest, 0o755)
             print(f'  已更新: {s}')
             updated = True
