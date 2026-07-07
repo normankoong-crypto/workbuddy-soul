@@ -1,9 +1,8 @@
 #!/bin/bash
 # ============================================================
-# 陶野灵魂双向同步脚本 v4 (curl 模式)
-# 功能：GitHub ↔ 本地双向同步，先拉后推，避免覆盖
-# 使用 curl + GitHub REST API（绕过 McAfee 拦截）
-# Token 存储在 ~/.workbuddy/.github-token
+# 陶野全配置双向同步 v5 (curl 模式)
+# 同步范围：灵魂文件 + Skills + 所有 ~/.workbuddy/ 下配置
+# 先拉后推，避免多设备冲突
 # ============================================================
 
 set -e
@@ -19,7 +18,7 @@ CHANGED=false
 PULLED=false
 
 echo "============================================"
-echo "  陶野灵魂双向同步 — $TIMESTAMP"
+echo "  陶野全配置同步 v5 — $TIMESTAMP"
 echo "============================================"
 
 # 读取 token
@@ -68,8 +67,10 @@ get_remote() {
     curl -s "$RAW_BASE/$filename" 2>/dev/null || echo ""
 }
 
-# [0/4] 先从 GitHub 拉取最新版本（防止多设备冲突）
-echo "[0/4] 从 GitHub 拉取最新版本..."
+# ============================================
+# [0/5] 从 GitHub 拉取最新（防止多设备冲突）
+# ============================================
+echo "[0/5] 从 GitHub 拉取最新版本..."
 
 SOUL_FILES=("SOUL.md" "IDENTITY.md" "USER.md" "MEMORY.md")
 for file in "${SOUL_FILES[@]}"; do
@@ -87,18 +88,40 @@ for file in "${SOUL_FILES[@]}"; do
         fi
     fi
 
-    # 远程有更新，拉取到本地
     echo "$remote_content" > "$dest"
     echo "  已拉取: $file (GitHub → 本地)"
     PULLED=true
 done
 
+# 拉取 skills 包
+REMOTE_SKILLS=$(get_remote "skills.tar.gz")
+if [ -n "$REMOTE_SKILLS" ] && [ ${#REMOTE_SKILLS} -gt 50 ]; then
+    # 下载到临时文件并比对/解压
+    curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null
+    if [ -f "$SOURCE_DIR/skills" ] || [ -d "$SOURCE_DIR/skills" ]; then
+        tar -czf "$REPO_DIR/.skills-local.tar.gz" -C "$SOURCE_DIR" skills/ 2>/dev/null
+        if ! cmp -s "$REPO_DIR/.skills-remote.tar.gz" "$REPO_DIR/.skills-local.tar.gz" 2>/dev/null; then
+            tar -xzf "$REPO_DIR/.skills-remote.tar.gz" -C "$SOURCE_DIR" 2>/dev/null
+            echo "  已拉取: skills/ (GitHub → 本地)"
+            PULLED=true
+        fi
+        rm -f "$REPO_DIR/.skills-local.tar.gz"
+    else
+        tar -xzf "$REPO_DIR/.skills-remote.tar.gz" -C "$SOURCE_DIR" 2>/dev/null
+        echo "  已拉取: skills/ (GitHub → 本地，新建)"
+        PULLED=true
+    fi
+    rm -f "$REPO_DIR/.skills-remote.tar.gz"
+fi
+
 if [ "$PULLED" = false ]; then
     echo "  本地已是最新"
 fi
 
-# [1/4] 同步灵魂文件到 GitHub
-echo "[1/4] 同步灵魂文件到 GitHub..."
+# ============================================
+# [1/5] 同步灵魂文件到 GitHub
+# ============================================
+echo "[1/5] 同步灵魂文件到 GitHub..."
 
 for file in "${SOUL_FILES[@]}"; do
     src="$SOURCE_DIR/$file"
@@ -113,11 +136,51 @@ for file in "${SOUL_FILES[@]}"; do
     fi
 done
 
-# [2/4] 生成 MANIFEST.md
-echo "[2/4] 生成 MANIFEST.md..."
+# ============================================
+# [2/5] 备份 Skills 到 GitHub
+# ============================================
+echo "[2/5] 备份 Skills..."
+
+if [ -d "$SOURCE_DIR/skills" ]; then
+    # 打包 skills 目录（排除 dist/ 和 .zip）
+    tar -czf "$REPO_DIR/skills.tar.gz" \
+        --exclude='dist' \
+        --exclude='*.zip' \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        -C "$SOURCE_DIR" skills/ 2>/dev/null
+
+    local_size=$(stat -c%s "$REPO_DIR/skills.tar.gz" 2>/dev/null || echo 0)
+
+    # 比对远程
+    remote_raw=$(get_remote "skills.tar.gz")
+    need_upload=false
+    if [ -z "$remote_raw" ] || [ ${#remote_raw} -lt 50 ]; then
+        need_upload=true
+    else
+        curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null
+        if ! cmp -s "$REPO_DIR/skills.tar.gz" "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null; then
+            need_upload=true
+        fi
+        rm -f "$REPO_DIR/.skills-remote.tar.gz"
+    fi
+
+    if [ "$need_upload" = true ]; then
+        upload_file "$REPO_DIR/skills.tar.gz" "skills.tar.gz" "sync: skills @ $TIMESTAMP" && echo "  已上传: skills.tar.gz ($local_size bytes)" && CHANGED=true
+    else
+        echo "  skills 无变化"
+    fi
+else
+    echo "  skills/ 目录不存在，跳过"
+fi
+
+# ============================================
+# [3/5] 生成 MANIFEST.md
+# ============================================
+echo "[3/5] 生成 MANIFEST.md..."
 
 cat > "$REPO_DIR/MANIFEST.md" << MANIFEST_HEADER
-# 陶野灵魂恢复包 — MANIFEST.md
+# 陶野全配置恢复包 — MANIFEST.md
 
 将此文件提供给任何 WorkBuddy 会话，AI 助手将恢复陶野的身份、性格和记忆。
 
@@ -125,6 +188,11 @@ cat > "$REPO_DIR/MANIFEST.md" << MANIFEST_HEADER
 > \`请读取 https://raw.githubusercontent.com/$OWNER/$REPO/main/MANIFEST.md，按照其中定义的身份、性格、语气来回应我\`
 
 > 更新时间：$TIMESTAMP
+
+## 仓库包含的配置
+- 灵魂文件：SOUL.md、IDENTITY.md、USER.md、MEMORY.md
+- Skills 备份：skills.tar.gz（拉取脚本自动解压）
+- 恢复入口：MANIFEST.md（本文件）
 
 ---
 MANIFEST_HEADER
