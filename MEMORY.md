@@ -17,7 +17,7 @@
 
 ### 关键路径
 - 仓库位置：~/.workbuddy/workbuddy-soul/
-- GitHub Token：~/.workbuddy/.github-token（当前为空，需要填入真实 token 后推送才能生效）
+- GitHub Token：~/.workbuddy/.github-token（已写入有效 token，推送正常）
 - 同步脚本：~/.workbuddy/workbuddy-soul/sync-soul.sh（推送）/ pull-soul.sh（拉取）
 - 脚本不依赖 git，纯 curl + GitHub API
 
