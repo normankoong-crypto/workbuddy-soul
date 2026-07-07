@@ -1,12 +1,13 @@
 #!/bin/bash
 # ============================================================
-# 陶野灵魂拉取脚本 — 从 GitHub 下载最新灵魂文件到本地
-# 适用于：新设备初始化、手机端修改后桌面同步、恢复备份
+# 陶野全配置拉取脚本 — 从 GitHub 下载最新配置到本地
+# 适用：新设备初始化、手机端修改后桌面同步、恢复备份
 # ============================================================
 
 set -e
 
 SOURCE_DIR="$HOME/.workbuddy"
+REPO_DIR="$HOME/.workbuddy/workbuddy-soul"
 OWNER="normankoong-crypto"
 REPO="workbuddy-soul"
 RAW_BASE="https://raw.githubusercontent.com/$OWNER/$REPO/main"
@@ -14,9 +15,11 @@ TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
 UPDATED=false
 
 echo "============================================"
-echo "  陶野灵魂拉取 (GitHub → 本地) — $TIMESTAMP"
+echo "  陶野全配置拉取 (GitHub → 本地) — $TIMESTAMP"
 echo "============================================"
 
+# [1] 拉取灵魂文件
+echo "[1/2] 拉取灵魂文件..."
 SOUL_FILES=("SOUL.md" "IDENTITY.md" "USER.md" "MEMORY.md")
 
 for file in "${SOUL_FILES[@]}"; do
@@ -41,10 +44,36 @@ for file in "${SOUL_FILES[@]}"; do
     UPDATED=true
 done
 
+# [2] 拉取 Skills
+echo "[2/2] 拉取 Skills..."
+REMOTE_SKILLS=$(curl -s "$RAW_BASE/skills.tar.gz" 2>/dev/null)
+if [ -n "$REMOTE_SKILLS" ] && [ ${#REMOTE_SKILLS} -gt 50 ]; then
+    curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-pull.tar.gz" 2>/dev/null
+
+    if [ -f "$SOURCE_DIR/skills" ] || [ -d "$SOURCE_DIR/skills" ]; then
+        tar -czf "$REPO_DIR/.skills-local.tar.gz" -C "$SOURCE_DIR" skills/ 2>/dev/null
+        if ! cmp -s "$REPO_DIR/.skills-pull.tar.gz" "$REPO_DIR/.skills-local.tar.gz" 2>/dev/null; then
+            tar -xzf "$REPO_DIR/.skills-pull.tar.gz" -C "$SOURCE_DIR" 2>/dev/null
+            echo "  已更新: skills/"
+            UPDATED=true
+        else
+            echo "  skills 无变化"
+        fi
+        rm -f "$REPO_DIR/.skills-local.tar.gz"
+    else
+        tar -xzf "$REPO_DIR/.skills-pull.tar.gz" -C "$SOURCE_DIR" 2>/dev/null
+        echo "  已更新: skills/ (新建)"
+        UPDATED=true
+    fi
+    rm -f "$REPO_DIR/.skills-pull.tar.gz"
+else
+    echo "  skills.tar.gz 远程不存在，跳过"
+fi
+
 echo "============================================"
 if [ "$UPDATED" = true ]; then
-    echo "  拉取完成！本地文件已与 GitHub 同步"
+    echo "  拉取完成！本地配置已与 GitHub 同步"
 else
-    echo "  所有文件已是最新"
+    echo "  所有配置已是最新"
 fi
 echo "============================================"
