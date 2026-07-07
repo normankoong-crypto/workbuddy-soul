@@ -379,6 +379,8 @@ echo "[5/7] 生成 MANIFEST.md..."
 
 python3 - << 'PYEOF'
 import os, sys, shutil
+
+source_dir = os.path.expanduser('~/.workbuddy')
 repo_dir = os.path.join(source_dir, 'workbuddy-soul')
 timestamp = os.popen('date "+%Y-%m-%d %H:%M:%S"').read().strip()
 owner = 'normankoong-crypto'
