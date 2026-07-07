@@ -239,7 +239,7 @@ fi
 echo "[3/7] 收集项目级记忆..."
 
 python3 - << 'PYEOF'
-import os, json, shutil
+import os, json, shutil, sys
 
 repo_dir = os.path.expanduser('~/.workbuddy/workbuddy-soul')
 pm_dir = os.path.join(repo_dir, 'project-memories')
