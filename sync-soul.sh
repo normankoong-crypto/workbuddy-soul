@@ -31,7 +31,7 @@ fi
 echo "[0/7] 从 GitHub 拉取最新版本..."
 
 python3 -c "
-import urllib.request, os, sys, tempfile, tarfile
+import urllib.request, os, sys, shutil, tempfile, tarfile
 
 source_dir = '$SOURCE_DIR'
 raw_base = 'https://raw.githubusercontent.com/$OWNER/$REPO/main'
@@ -49,9 +49,14 @@ for f in files:
             with open(dest, 'r', encoding='utf-8', errors='replace') as fp:
                 local = fp.read()
         if local != remote:
-            with open(dest, 'w', encoding='utf-8') as fp:
+            # 原子写入 + 备份
+            tmp_path = dest + '.tmp'
+            with open(tmp_path, 'w', encoding='utf-8') as fp:
                 fp.write(remote)
-            print(f'  已拉取: {f}')
+            if os.path.exists(dest) and os.path.getsize(dest) > 0:
+                shutil.copy2(dest, dest + '.bak')
+            os.replace(tmp_path, dest)
+            print(f'  已拉取: {f} (.bak 已备份)')
             pulled = True
         else:
             print(f'  无变化: {f}')
@@ -373,9 +378,7 @@ fi
 echo "[5/7] 生成 MANIFEST.md..."
 
 python3 - << 'PYEOF'
-import os, sys
-
-source_dir = os.path.expanduser('~/.workbuddy')
+import os, sys, shutil
 repo_dir = os.path.join(source_dir, 'workbuddy-soul')
 timestamp = os.popen('date "+%Y-%m-%d %H:%M:%S"').read().strip()
 owner = 'normankoong-crypto'
@@ -409,10 +412,13 @@ for f in files:
             manifest += '\n' + fp.read() + '\n'
 
 manifest_path = os.path.join(repo_dir, 'MANIFEST.md')
+# 备份旧 MANIFEST，再写入
+if os.path.exists(manifest_path) and os.path.getsize(manifest_path) > 0:
+    shutil.copy2(manifest_path, manifest_path + '.bak')
 with open(manifest_path, 'w', encoding='utf-8') as fp:
     fp.write(manifest)
 
-print('  MANIFEST.md 已生成')
+print('  MANIFEST.md 已生成 (.bak 已备份)')
 PYEOF
 
 if [ -n "$TOKEN" ]; then
