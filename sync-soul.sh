@@ -1,11 +1,9 @@
 #!/bin/bash
 # ============================================================
-# 陶野全配置双向同步 v5 (curl 模式)
+# 陶野全配置双向同步 v5.1 (curl 模式)
 # 同步范围：灵魂文件 + Skills + 所有 ~/.workbuddy/ 下配置
 # 先拉后推，避免多设备冲突
 # ============================================================
-
-set -e
 
 SOURCE_DIR="$HOME/.workbuddy"
 REPO_DIR="$HOME/.workbuddy/workbuddy-soul"
@@ -18,7 +16,7 @@ CHANGED=false
 PULLED=false
 
 echo "============================================"
-echo "  陶野全配置同步 v5 — $TIMESTAMP"
+echo "  陶野全配置同步 v5.1 — $TIMESTAMP"
 echo "============================================"
 
 # 读取 token
@@ -36,35 +34,29 @@ upload_file() {
     local filepath="$1"
     local filename="$2"
     local msg="$3"
-
     local sha=""
-    local existing=$(curl -s -H "$AUTH" "$API_BASE/contents/$filename" 2>/dev/null)
-    sha=$(echo "$existing" | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null)
-
-    local content=$(python -c "import base64,sys; print(base64.b64encode(sys.stdin.buffer.read()).decode())" < "$filepath")
-
+    local existing=$(curl -s -H "$AUTH" "$API_BASE/contents/$filename" 2>/dev/null || true)
+    sha=$(echo "$existing" | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || true)
+    local content=$(python -c "import base64,sys; print(base64.b64encode(sys.stdin.buffer.read()).decode())" < "$filepath" 2>/dev/null || true)
     local body
     if [ -n "$sha" ]; then
-        body=$(python -c "import json; print(json.dumps({'message':'$msg','content':'$content','sha':'$sha'}))")
+        body=$(python -c "import json; print(json.dumps({'message':'$msg','content':'$content','sha':'$sha'}))" 2>/dev/null || true)
     else
-        body=$(python -c "import json; print(json.dumps({'message':'$msg','content':'$content'}))")
+        body=$(python -c "import json; print(json.dumps({'message':'$msg','content':'$content'}))" 2>/dev/null || true)
     fi
-
-    local result=$(curl -s -X PUT -H "$AUTH" -H "Content-Type: application/json" "$API_BASE/contents/$filename" -d "$body" 2>/dev/null)
-    local ok=$(echo "$result" | python -c "import sys,json; d=json.load(sys.stdin); print('OK' if 'content' in d else 'FAIL')" 2>/dev/null)
-
+    local result=$(curl -s -X PUT -H "$AUTH" -H "Content-Type: application/json" "$API_BASE/contents/$filename" -d "$body" 2>/dev/null || true)
+    local ok=$(echo "$result" | python -c "import sys,json; d=json.load(sys.stdin); print('OK' if 'content' in d else 'FAIL')" 2>/dev/null || true)
     if [ "$ok" = "OK" ]; then
         return 0
     else
-        local err=$(echo "$result" | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('message','?'))" 2>/dev/null)
+        local err=$(echo "$result" | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('message','?'))" 2>/dev/null || true)
         echo "  [ERROR] 上传失败 ($filename): $err"
         return 1
     fi
 }
 
-get_remote() {
-    local filename="$1"
-    curl -s "$RAW_BASE/$filename" 2>/dev/null || echo ""
+get_remote_text() {
+    curl -s "$RAW_BASE/$1" 2>/dev/null || echo ""
 }
 
 # ============================================
@@ -75,43 +67,36 @@ echo "[0/5] 从 GitHub 拉取最新版本..."
 SOUL_FILES=("SOUL.md" "IDENTITY.md" "USER.md" "MEMORY.md")
 for file in "${SOUL_FILES[@]}"; do
     dest="$SOURCE_DIR/$file"
-    remote_content=$(get_remote "$file")
-
+    remote_content=$(get_remote_text "$file")
     if [ -z "$remote_content" ]; then
         continue
     fi
-
     if [ -f "$dest" ]; then
-        local_content=$(cat "$dest")
+        local_content=$(cat "$dest" 2>/dev/null || true)
         if [ "$local_content" = "$remote_content" ]; then
             continue
         fi
     fi
-
-    echo "$remote_content" > "$dest"
-    echo "  已拉取: $file (GitHub → 本地)"
-    PULLED=true
+    echo "$remote_content" > "$dest" && echo "  已拉取: $file (GitHub → 本地)" && PULLED=true
 done
 
-# 拉取 skills 包
+# 拉取 skills 包（HTTP 状态码判断，不用变量装二进制）
 SKILLS_HTTP=$(curl -sI "$RAW_BASE/skills.tar.gz" 2>/dev/null | grep -c "200" || echo 0)
+mkdir -p "$REPO_DIR" 2>/dev/null
 if [ "$SKILLS_HTTP" -gt 0 ]; then
-    # 下载到临时文件并比对/解压
-    curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null
-    if [ -f "$SOURCE_DIR/skills" ] || [ -d "$SOURCE_DIR/skills" ]; then
-        tar -czf "$REPO_DIR/.skills-local.tar.gz" -C "$SOURCE_DIR" skills/ 2>/dev/null
-        if ! cmp -s "$REPO_DIR/.skills-remote.tar.gz" "$REPO_DIR/.skills-local.tar.gz" 2>/dev/null; then
-            tar -xzf "$REPO_DIR/.skills-remote.tar.gz" -C "$SOURCE_DIR" 2>/dev/null
-            echo "  已拉取: skills/ (GitHub → 本地)"
-            PULLED=true
+    curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null || true
+    if [ -d "$SOURCE_DIR/skills" ]; then
+        tar -czf "$REPO_DIR/.skills-local.tar.gz" -C "$SOURCE_DIR" skills/ 2>/dev/null || true
+        if cmp -s "$REPO_DIR/.skills-remote.tar.gz" "$REPO_DIR/.skills-local.tar.gz" 2>/dev/null; then
+            : # no diff
+        else
+            tar -xzf "$REPO_DIR/.skills-remote.tar.gz" -C "$SOURCE_DIR" 2>/dev/null && echo "  已拉取: skills/ (GitHub → 本地)" && PULLED=true
         fi
-        rm -f "$REPO_DIR/.skills-local.tar.gz"
+        rm -f "$REPO_DIR/.skills-local.tar.gz" 2>/dev/null
     else
-        tar -xzf "$REPO_DIR/.skills-remote.tar.gz" -C "$SOURCE_DIR" 2>/dev/null
-        echo "  已拉取: skills/ (GitHub → 本地，新建)"
-        PULLED=true
+        tar -xzf "$REPO_DIR/.skills-remote.tar.gz" -C "$SOURCE_DIR" 2>/dev/null && echo "  已拉取: skills/ (GitHub → 本地，新建)" && PULLED=true
     fi
-    rm -f "$REPO_DIR/.skills-remote.tar.gz"
+    rm -f "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null
 fi
 
 if [ "$PULLED" = false ]; then
@@ -126,8 +111,8 @@ echo "[1/5] 同步灵魂文件到 GitHub..."
 for file in "${SOUL_FILES[@]}"; do
     src="$SOURCE_DIR/$file"
     if [ -f "$src" ]; then
-        local_content=$(cat "$src")
-        remote_content=$(get_remote "$file")
+        local_content=$(cat "$src" 2>/dev/null || true)
+        remote_content=$(get_remote_text "$file")
         if [ "$local_content" != "$remote_content" ]; then
             upload_file "$src" "$file" "sync: $file @ $TIMESTAMP" && echo "  已上传: $file" && CHANGED=true
         else
@@ -142,27 +127,23 @@ done
 echo "[2/5] 备份 Skills..."
 
 if [ -d "$SOURCE_DIR/skills" ]; then
-    # 打包 skills 目录（排除 dist/ 和 .zip）
     tar -czf "$REPO_DIR/skills.tar.gz" \
-        --exclude='dist' \
-        --exclude='*.zip' \
-        --exclude='__pycache__' \
-        --exclude='*.pyc' \
-        -C "$SOURCE_DIR" skills/ 2>/dev/null
-
+        --exclude='dist' --exclude='*.zip' --exclude='__pycache__' --exclude='*.pyc' \
+        -C "$SOURCE_DIR" skills/ 2>/dev/null || true
     local_size=$(stat -c%s "$REPO_DIR/skills.tar.gz" 2>/dev/null || echo 0)
 
-    # 比对远程（用 HTTP 状态码判断，不用变量装二进制）
     SKILLS_HTTP=$(curl -sI "$RAW_BASE/skills.tar.gz" 2>/dev/null | grep -c "200" || echo 0)
     need_upload=false
     if [ "$SKILLS_HTTP" -eq 0 ]; then
         need_upload=true
     else
-        curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null
-        if ! cmp -s "$REPO_DIR/skills.tar.gz" "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null; then
+        curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null || true
+        if cmp -s "$REPO_DIR/skills.tar.gz" "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null; then
+            : # same, skip
+        else
             need_upload=true
         fi
-        rm -f "$REPO_DIR/.skills-remote.tar.gz"
+        rm -f "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null
     fi
 
     if [ "$need_upload" = true ]; then
@@ -197,17 +178,16 @@ cat > "$REPO_DIR/MANIFEST.md" << MANIFEST_HEADER
 ---
 MANIFEST_HEADER
 
-MANIFEST_SOURCES=("IDENTITY.md" "USER.md" "SOUL.md" "MEMORY.md")
-for file in "${MANIFEST_SOURCES[@]}"; do
+for file in "IDENTITY.md" "USER.md" "SOUL.md" "MEMORY.md"; do
     src="$SOURCE_DIR/$file"
     if [ -f "$src" ]; then
         echo "" >> "$REPO_DIR/MANIFEST.md"
-        cat "$src" >> "$REPO_DIR/MANIFEST.md"
+        cat "$src" >> "$REPO_DIR/MANIFEST.md" 2>/dev/null || true
     fi
 done
 
-remote_manifest=$(get_remote "MANIFEST.md")
-local_manifest=$(cat "$REPO_DIR/MANIFEST.md")
+remote_manifest=$(get_remote_text "MANIFEST.md")
+local_manifest=$(cat "$REPO_DIR/MANIFEST.md" 2>/dev/null || true)
 if [ "$local_manifest" != "$remote_manifest" ]; then
     upload_file "$REPO_DIR/MANIFEST.md" "MANIFEST.md" "sync: MANIFEST.md @ $TIMESTAMP" && echo "  MANIFEST.md 已更新" && CHANGED=true
 else
