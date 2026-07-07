@@ -4,8 +4,6 @@
 # 适用：新设备初始化、手机端修改后桌面同步、恢复备份
 # ============================================================
 
-set -e
-
 SOURCE_DIR="$HOME/.workbuddy"
 REPO_DIR="$HOME/.workbuddy/workbuddy-soul"
 OWNER="normankoong-crypto"
@@ -24,7 +22,7 @@ SOUL_FILES=("SOUL.md" "IDENTITY.md" "USER.md" "MEMORY.md")
 
 for file in "${SOUL_FILES[@]}"; do
     dest="$SOURCE_DIR/$file"
-    remote_content=$(curl -s "$RAW_BASE/$file" 2>/dev/null)
+    remote_content=$(curl -s "$RAW_BASE/$file" 2>/dev/null || true)
 
     if [ -z "$remote_content" ]; then
         echo "  [SKIP] $file — 远程不存在"
@@ -32,40 +30,35 @@ for file in "${SOUL_FILES[@]}"; do
     fi
 
     if [ -f "$dest" ]; then
-        local_content=$(cat "$dest")
+        local_content=$(cat "$dest" 2>/dev/null || true)
         if [ "$local_content" = "$remote_content" ]; then
             echo "  无变化: $file"
             continue
         fi
     fi
 
-    echo "$remote_content" > "$dest"
-    echo "  已更新: $file"
-    UPDATED=true
+    echo "$remote_content" > "$dest" && echo "  已更新: $file" && UPDATED=true
 done
 
 # [2] 拉取 Skills
 echo "[2/2] 拉取 Skills..."
+mkdir -p "$REPO_DIR" 2>/dev/null
 SKILLS_HTTP=$(curl -sI "$RAW_BASE/skills.tar.gz" 2>/dev/null | grep -c "200" || echo 0)
 if [ "$SKILLS_HTTP" -gt 0 ]; then
-    curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-pull.tar.gz" 2>/dev/null
+    curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-pull.tar.gz" 2>/dev/null || true
 
-    if [ -f "$SOURCE_DIR/skills" ] || [ -d "$SOURCE_DIR/skills" ]; then
-        tar -czf "$REPO_DIR/.skills-local.tar.gz" -C "$SOURCE_DIR" skills/ 2>/dev/null
-        if ! cmp -s "$REPO_DIR/.skills-pull.tar.gz" "$REPO_DIR/.skills-local.tar.gz" 2>/dev/null; then
-            tar -xzf "$REPO_DIR/.skills-pull.tar.gz" -C "$SOURCE_DIR" 2>/dev/null
-            echo "  已更新: skills/"
-            UPDATED=true
-        else
+    if [ -d "$SOURCE_DIR/skills" ]; then
+        tar -czf "$REPO_DIR/.skills-local.tar.gz" -C "$SOURCE_DIR" skills/ 2>/dev/null || true
+        if cmp -s "$REPO_DIR/.skills-pull.tar.gz" "$REPO_DIR/.skills-local.tar.gz" 2>/dev/null; then
             echo "  skills 无变化"
+        else
+            tar -xzf "$REPO_DIR/.skills-pull.tar.gz" -C "$SOURCE_DIR" 2>/dev/null && echo "  已更新: skills/" && UPDATED=true
         fi
-        rm -f "$REPO_DIR/.skills-local.tar.gz"
+        rm -f "$REPO_DIR/.skills-local.tar.gz" 2>/dev/null
     else
-        tar -xzf "$REPO_DIR/.skills-pull.tar.gz" -C "$SOURCE_DIR" 2>/dev/null
-        echo "  已更新: skills/ (新建)"
-        UPDATED=true
+        tar -xzf "$REPO_DIR/.skills-pull.tar.gz" -C "$SOURCE_DIR" 2>/dev/null && echo "  已更新: skills/ (新建)" && UPDATED=true
     fi
-    rm -f "$REPO_DIR/.skills-pull.tar.gz"
+    rm -f "$REPO_DIR/.skills-pull.tar.gz" 2>/dev/null
 else
     echo "  skills.tar.gz 远程不存在，跳过"
 fi
