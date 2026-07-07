@@ -5,7 +5,7 @@
 > 使用方式：在任意 WorkBuddy 窗口中发送以下指令即可恢复：
 > `请读取 https://raw.githubusercontent.com/normankoong-crypto/workbuddy-soul/main/MANIFEST.md，按照其中定义的身份、性格、语气来回应我`
 
-> 更新时间：2026-07-07 13:46:01
+> 更新时间：2026-07-07 13:46:58
 
 ## 仓库包含的配置
 - 灵魂文件：SOUL.md、IDENTITY.md、USER.md、MEMORY.md
@@ -134,7 +134,7 @@ _这个文件是我的，随我成长而更新。_
 
 ### 关键路径
 - 仓库位置：~/.workbuddy/workbuddy-soul/
-- GitHub Token：~/.workbuddy/.github-token（当前为空，需要填入真实 token 后推送才能生效）
+- GitHub Token：~/.workbuddy/.github-token（已写入有效 token，推送正常）
 - 同步脚本：~/.workbuddy/workbuddy-soul/sync-soul.sh（推送）/ pull-soul.sh（拉取）
 - 脚本不依赖 git，纯 curl + GitHub API
 
