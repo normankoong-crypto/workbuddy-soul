@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
-# 陶野全配置双向同步 v5.1 (curl 模式)
-# 同步范围：灵魂文件 + Skills + 所有 ~/.workbuddy/ 下配置
+# 陶野全配置双向同步 v6.0 (curl 模式)
+# 同步范围：灵魂文件 + Skills + 每日对话摘要 + 所有 ~/.workbuddy/ 下配置
 # 先拉后推，避免多设备冲突
 # ============================================================
 
@@ -16,7 +16,7 @@ CHANGED=false
 PULLED=false
 
 echo "============================================"
-echo "  陶野全配置同步 v5.1 — $TIMESTAMP"
+echo "  陶野全配置同步 v6.0 — $TIMESTAMP"
 echo "============================================"
 
 # 读取 token
@@ -35,16 +35,25 @@ upload_file() {
     local filename="$2"
     local msg="$3"
     local sha=""
-    local existing=$(curl -s -H "$AUTH" "$API_BASE/contents/$filename" 2>/dev/null || true)
+    local existing=$(curl -sf -H "$AUTH" "$API_BASE/contents/$filename" 2>/dev/null || echo "")
     sha=$(echo "$existing" | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || true)
-    local content=$(python -c "import base64,sys; print(base64.b64encode(sys.stdin.buffer.read()).decode())" < "$filepath" 2>/dev/null || true)
-    local body
-    if [ -n "$sha" ]; then
-        body=$(python -c "import json; print(json.dumps({'message':'$msg','content':'$content','sha':'$sha'}))" 2>/dev/null || true)
-    else
-        body=$(python -c "import json; print(json.dumps({'message':'$msg','content':'$content'}))" 2>/dev/null || true)
-    fi
-    local result=$(curl -s -X PUT -H "$AUTH" -H "Content-Type: application/json" "$API_BASE/contents/$filename" -d "$body" 2>/dev/null || true)
+    local tmpbody="$REPO_DIR/.upload_body.json"
+    FILEPATH="$filepath" MSG="$msg" SHA="$sha" TMPBODY="$tmpbody" python -c "
+import os, base64, json, re
+def to_win(p):
+    m = re.match(r'^/([a-zA-Z])/(.*)', p)
+    return m.group(1).upper() + ':/' + m.group(2) if m else p
+with open(to_win(os.environ['FILEPATH']), 'rb') as f:
+    content = base64.b64encode(f.read()).decode()
+data = {'message': os.environ['MSG'], 'content': content}
+sha = os.environ['SHA']
+if sha:
+    data['sha'] = sha
+with open(to_win(os.environ['TMPBODY']), 'w') as f:
+    json.dump(data, f)
+" 2>/dev/null || true
+    local result=$(cat "$tmpbody" | curl -s -X PUT -H "$AUTH" -H "Content-Type: application/json" "$API_BASE/contents/$filename" --data-binary @- 2>/dev/null || true)
+    rm -f "$tmpbody" 2>/dev/null
     local ok=$(echo "$result" | python -c "import sys,json; d=json.load(sys.stdin); print('OK' if 'content' in d else 'FAIL')" 2>/dev/null || true)
     if [ "$ok" = "OK" ]; then
         return 0
@@ -56,15 +65,15 @@ upload_file() {
 }
 
 get_remote_text() {
-    curl -s "$RAW_BASE/$1" 2>/dev/null || echo ""
+    curl -sf "$RAW_BASE/$1" 2>/dev/null || echo ""
 }
 
 # ============================================
-# [0/5] 从 GitHub 拉取最新（防止多设备冲突）
+# [0/6] 从 GitHub 拉取最新（防止多设备冲突）
 # ============================================
-echo "[0/5] 从 GitHub 拉取最新版本..."
+echo "[0/6] 从 GitHub 拉取最新版本..."
 
-SOUL_FILES=("SOUL.md" "IDENTITY.md" "USER.md" "MEMORY.md")
+SOUL_FILES=("SOUL.md" "IDENTITY.md" "USER.md" "MEMORY.md" "DIALOGUE-LOG.md")
 for file in "${SOUL_FILES[@]}"; do
     dest="$SOURCE_DIR/$file"
     remote_content=$(get_remote_text "$file")
@@ -81,7 +90,7 @@ for file in "${SOUL_FILES[@]}"; do
 done
 
 # 拉取 skills 包（HTTP 状态码判断，不用变量装二进制）
-SKILLS_HTTP=$(curl -sI "$RAW_BASE/skills.tar.gz" 2>/dev/null | grep -c "200" || echo 0)
+SKILLS_HTTP=$(curl -sI "$RAW_BASE/skills.tar.gz" 2>/dev/null | grep -c "200" || true)
 mkdir -p "$REPO_DIR" 2>/dev/null
 if [ "$SKILLS_HTTP" -gt 0 ]; then
     curl -s "$RAW_BASE/skills.tar.gz" -o "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null || true
@@ -99,14 +108,33 @@ if [ "$SKILLS_HTTP" -gt 0 ]; then
     rm -f "$REPO_DIR/.skills-remote.tar.gz" 2>/dev/null
 fi
 
+# 拉取每日对话摘要
+DS_HTTP=$(curl -sI "$RAW_BASE/daily-summaries.tar.gz" 2>/dev/null | grep -c "200" || true)
+if [ "$DS_HTTP" -gt 0 ]; then
+    curl -s "$RAW_BASE/daily-summaries.tar.gz" -o "$REPO_DIR/.ds-remote.tar.gz" 2>/dev/null || true
+    if [ -d "$SOURCE_DIR/daily-summaries" ]; then
+        tar -czf "$REPO_DIR/.ds-local.tar.gz" -C "$SOURCE_DIR" daily-summaries/ 2>/dev/null || true
+        if cmp -s "$REPO_DIR/.ds-remote.tar.gz" "$REPO_DIR/.ds-local.tar.gz" 2>/dev/null; then
+            : # no diff
+        else
+            tar -xzf "$REPO_DIR/.ds-remote.tar.gz" -C "$SOURCE_DIR" 2>/dev/null && echo "  已拉取: daily-summaries/ (GitHub → 本地)" && PULLED=true
+        fi
+        rm -f "$REPO_DIR/.ds-local.tar.gz" 2>/dev/null
+    else
+        mkdir -p "$SOURCE_DIR/daily-summaries" 2>/dev/null
+        tar -xzf "$REPO_DIR/.ds-remote.tar.gz" -C "$SOURCE_DIR" 2>/dev/null && echo "  已拉取: daily-summaries/ (GitHub → 本地，新建)" && PULLED=true
+    fi
+    rm -f "$REPO_DIR/.ds-remote.tar.gz" 2>/dev/null
+fi
+
 if [ "$PULLED" = false ]; then
     echo "  本地已是最新"
 fi
 
 # ============================================
-# [1/5] 同步灵魂文件到 GitHub
+# [1/6] 同步灵魂文件到 GitHub
 # ============================================
-echo "[1/5] 同步灵魂文件到 GitHub..."
+echo "[1/6] 同步灵魂文件到 GitHub..."
 
 for file in "${SOUL_FILES[@]}"; do
     src="$SOURCE_DIR/$file"
@@ -122,9 +150,9 @@ for file in "${SOUL_FILES[@]}"; do
 done
 
 # ============================================
-# [2/5] 备份 Skills 到 GitHub
+# [2/6] 备份 Skills 到 GitHub
 # ============================================
-echo "[2/5] 备份 Skills..."
+echo "[2/6] 备份 Skills..."
 
 if [ -d "$SOURCE_DIR/skills" ]; then
     tar -czf "$REPO_DIR/skills.tar.gz" \
@@ -132,7 +160,7 @@ if [ -d "$SOURCE_DIR/skills" ]; then
         -C "$SOURCE_DIR" skills/ 2>/dev/null || true
     local_size=$(stat -c%s "$REPO_DIR/skills.tar.gz" 2>/dev/null || echo 0)
 
-    SKILLS_HTTP=$(curl -sI "$RAW_BASE/skills.tar.gz" 2>/dev/null | grep -c "200" || echo 0)
+    SKILLS_HTTP=$(curl -sI "$RAW_BASE/skills.tar.gz" 2>/dev/null | grep -c "200" || true)
     need_upload=false
     if [ "$SKILLS_HTTP" -eq 0 ]; then
         need_upload=true
@@ -156,9 +184,41 @@ else
 fi
 
 # ============================================
-# [3/5] 生成 MANIFEST.md
+# [3/6] 备份每日对话摘要
 # ============================================
-echo "[3/5] 生成 MANIFEST.md..."
+echo "[3/6] 备份每日对话摘要..."
+
+if [ -d "$SOURCE_DIR/daily-summaries" ]; then
+    tar -czf "$REPO_DIR/daily-summaries.tar.gz" -C "$SOURCE_DIR" daily-summaries/ 2>/dev/null || true
+    local_ds_size=$(stat -c%s "$REPO_DIR/daily-summaries.tar.gz" 2>/dev/null || stat -f%z "$REPO_DIR/daily-summaries.tar.gz" 2>/dev/null || echo 0)
+
+    DS_HTTP=$(curl -sI "$RAW_BASE/daily-summaries.tar.gz" 2>/dev/null | grep -c "200" || true)
+    need_ds_upload=false
+    if [ "$DS_HTTP" -eq 0 ]; then
+        need_ds_upload=true
+    else
+        curl -s "$RAW_BASE/daily-summaries.tar.gz" -o "$REPO_DIR/.ds-remote.tar.gz" 2>/dev/null || true
+        if cmp -s "$REPO_DIR/daily-summaries.tar.gz" "$REPO_DIR/.ds-remote.tar.gz" 2>/dev/null; then
+            : # same, skip
+        else
+            need_ds_upload=true
+        fi
+        rm -f "$REPO_DIR/.ds-remote.tar.gz" 2>/dev/null
+    fi
+
+    if [ "$need_ds_upload" = true ]; then
+        upload_file "$REPO_DIR/daily-summaries.tar.gz" "daily-summaries.tar.gz" "sync: daily-summaries @ $TIMESTAMP" && echo "  已上传: daily-summaries.tar.gz ($local_ds_size bytes)" && CHANGED=true
+    else
+        echo "  daily-summaries 无变化"
+    fi
+else
+    echo "  daily-summaries/ 目录不存在，跳过"
+fi
+
+# ============================================
+# [4/6] 生成 MANIFEST.md
+# ============================================
+echo "[4/6] 生成 MANIFEST.md..."
 
 cat > "$REPO_DIR/MANIFEST.md" << MANIFEST_HEADER
 # 陶野全配置恢复包 — MANIFEST.md
@@ -173,6 +233,7 @@ cat > "$REPO_DIR/MANIFEST.md" << MANIFEST_HEADER
 ## 仓库包含的配置
 - 灵魂文件：SOUL.md、IDENTITY.md、USER.md、MEMORY.md
 - Skills 备份：skills.tar.gz（拉取脚本自动解压）
+- 每日对话摘要：daily-summaries.tar.gz（跨设备对话上下文）
 - 恢复入口：MANIFEST.md（本文件）
 
 ---
