@@ -13,6 +13,7 @@
 ### 同步范围
 - 灵魂文件：SOUL.md、IDENTITY.md、USER.md、MEMORY.md
 - Skills 目录：~/.workbuddy/skills/
+- 每日对话摘要：~/.workbuddy/daily-summaries/（跨设备对话上下文）
 - MANIFEST.md：每次 sync 自动重新生成
 
 ### 关键路径
@@ -34,3 +35,10 @@
 - 杭州，吉利工作
 - 负责印尼和马来市场的电动皮卡国际销售
 - 偶尔涉及吉利集团其他乘用车业务
+
+## 每日对话摘要规则
+- 路径：~/.workbuddy/daily-summaries/YYYY-MM-DD.md
+- 每次聊完重要内容后，追加摘要到当天的文件
+- 摘要格式：时间段 + 关键话题 + 重要决定/操作
+- 通过 sync-soul.sh / pull-soul.sh 随灵魂文件一起同步到 GitHub
+- 目的：让另一台设备上的陶野能快速了解之前聊过什么
