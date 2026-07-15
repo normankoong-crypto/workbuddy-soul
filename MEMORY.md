@@ -47,10 +47,15 @@
 - 文件：~/.workbuddy/DIALOGUE-LOG.md。两台设备各写一个扁平块：`## YYYY-MM-DD · 苹果` 与 `## YYYY-MM-DD · 惠普`，互不影响、不嵌套。
 - 铁律：每台设备只写自己的 `· 设备` 块、只读不碰对方块；先 pull 再改再 push。
 - 错峰：惠普 17:00，苹果 10:00 + 16:00（整点；16:00 避锁屏18:00、避惠普17:00、且整点最稳）。`BYMINUTE` 分钟级调度被平台解析错误（17:30 算成 16:54），故苹果第二点用整点16:00。
+- 苹果自动化 id（2026-07-15 删旧重建）：10:00=`automation-1784123660708`、16:00=`automation-1784123660735`，均 ACTIVE。
 - 对话摘要生成机制（pending 缓冲，已验证）：
   - 主对话(陶野)实时把要点追加到 `~/.workbuddy/pending-summary.md` 的 `## 日期 · 苹果` 段（本机只写苹果段）。
-  - 自动化：pull → 读 pending 苹果段 → 合并进 DIALOGUE-LOG 的 `## 日期 · 苹果` 块(无则新建) → 清空 pending 该段 → sync 推送。
+  - 自动化：pull → 读 pending 苹果段 → 合并进 DIALOGUE-LOG 的 `## 日期 · 苹果` 块(无则新建) → 清空 pending 该段 → light-sync 推送。
   - **不依赖 conversation_search**（实测搜"当天"返回0条，先天不可用）。
+- 自动化改用轻量同步脚本 `light-sync.sh`（实测不被137杀）：
+  - 路径 `~/.workbuddy/workbuddy-soul/light-sync.sh`，用法 `bash light-sync.sh pull|push`
+  - 仅用 curl/API 拉取 DIALOGUE-LOG.md + MEMORY.md、推送 DIALOGUE-LOG.md；不打包 skills/ds，故不会触发 signal 137
+  - 已推仓库 `tools/light-sync.sh` 备份。**替代 sync-soul.sh 用于自动化**（sync-soul.sh 在本会话 Bash 沙箱必被137杀，且原第[0/6]步会覆盖本地改动，已修防覆盖但仍过重）
 
 ## sync-soul.sh 重要修复（防覆盖本地改动）
 - 旧版 sync-soul.sh 第 [0/6] 步会无条件用远程覆盖本地（当 local≠remote 时），导致「改完再 sync」时本地改动被吞掉、且自动化编辑的内容推不上去
