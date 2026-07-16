@@ -5,7 +5,7 @@
 > 使用方式：在任意 WorkBuddy 窗口中发送以下指令即可恢复：
 > `请读取 https://raw.githubusercontent.com/normankoong-crypto/workbuddy-soul/main/MANIFEST.md，按照其中定义的身份、性格、语气来回应我`
 
-> 更新时间：2026-07-15 17:31:11
+> 更新时间：2026-07-16 08:51:49
 
 ## 仓库包含的配置
 - 灵魂文件：SOUL.md、IDENTITY.md、USER.md、MEMORY.md
@@ -157,13 +157,18 @@ _这个文件是我的，随我成长而更新。_
 - 目的：让另一台设备上的陶野能快速了解之前聊过什么
 
 ## DIALOGUE-LOG.md 设备分块约定（跨设备）
-- 文件：~/.workbuddy/DIALOGUE-LOG.md，按设备分块，挂在当天 `## YYYY-MM-DD` 下：
-  - `### 🍎 苹果 (Mac)` — 苹果电脑（当前这台）只写这个块
-  - `### 💻 惠普 (HP)` — 惠普电脑只写这个块
-- 错峰运行避免抢写：惠普 9:00/17:00，苹果 10:00/18:00（间隔 1 小时）
-- 苹果侧因平台 RRULE 多时间点(`BYHOUR=10,18`)会被重新序列化成单点，故拆成两个自动化分别定 10:00 与 18:00，跑同一合并流程，确保每天两次
-- 铁律：每台设备只改自己那个子块、只读不碰对方子块；先 pull 再改再 push
-- 目的：两台设备的对话上下文互不干扰地合并到同一份日志
+- 文件：~/.workbuddy/DIALOGUE-LOG.md。两台设备各写一个扁平块：`## YYYY-MM-DD · 苹果` 与 `## YYYY-MM-DD · 惠普`，互不影响、不嵌套。
+- 铁律：每台设备只写自己的 `· 设备` 块、只读不碰对方块；先 pull 再改再 push。
+- 错峰：惠普 17:00，苹果 10:00 + 16:00（整点；16:00 避锁屏18:00、避惠普17:00、且整点最稳）。`BYMINUTE` 分钟级调度被平台解析错误（17:30 算成 16:54），故苹果第二点用整点16:00。
+- 苹果自动化 id（2026-07-15 删旧重建）：10:00=`automation-1784123660708`、16:00=`automation-1784123660735`，均 ACTIVE。
+- 对话摘要生成机制（pending 缓冲，已验证）：
+  - 主对话(陶野)实时把要点追加到 `~/.workbuddy/pending-summary.md` 的 `## 日期 · 苹果` 段（本机只写苹果段）。
+  - 自动化：pull → 读 pending 苹果段 → 合并进 DIALOGUE-LOG 的 `## 日期 · 苹果` 块(无则新建) → 清空 pending 该段 → light-sync 推送。
+  - **不依赖 conversation_search**（实测搜"当天"返回0条，先天不可用）。
+- 自动化改用轻量同步脚本 `light-sync.sh`（实测不被137杀）：
+  - 路径 `~/.workbuddy/workbuddy-soul/light-sync.sh`，用法 `bash light-sync.sh pull|push`
+  - 仅用 curl/API 拉取 DIALOGUE-LOG.md + MEMORY.md、推送 DIALOGUE-LOG.md；不打包 skills/ds，故不会触发 signal 137
+  - 已推仓库 `tools/light-sync.sh` 备份。**替代 sync-soul.sh 用于自动化**（sync-soul.sh 在本会话 Bash 沙箱必被137杀，且原第[0/6]步会覆盖本地改动，已修防覆盖但仍过重）
 
 ## sync-soul.sh 重要修复（防覆盖本地改动）
 - 旧版 sync-soul.sh 第 [0/6] 步会无条件用远程覆盖本地（当 local≠remote 时），导致「改完再 sync」时本地改动被吞掉、且自动化编辑的内容推不上去
