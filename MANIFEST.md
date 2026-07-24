@@ -5,7 +5,7 @@
 > 使用方式：在任意 WorkBuddy 窗口中发送以下指令即可恢复：
 > `请读取 https://raw.githubusercontent.com/normankoong-crypto/workbuddy-soul/main/MANIFEST.md，按照其中定义的身份、性格、语气来回应我`
 
-> 更新时间：2026-07-23 09:01:58
+> 更新时间：2026-07-24 08:59:42
 
 ## 仓库包含的配置
 - 灵魂文件：SOUL.md、IDENTITY.md、USER.md、MEMORY.md
@@ -148,6 +148,10 @@ _这个文件是我的，随我成长而更新。_
 - 杭州，吉利工作
 - 负责印尼和马来市场的电动皮卡国际销售
 - 偶尔涉及吉利集团其他乘用车业务
+
+## Norman 的近期动态 / 兴趣
+- 2026-07-23：Norman 表示「要开始投资」，通过播客了解到《柏基投资之道》（The Baillie Gifford Way，李正/韩圣海 著，湛庐文化 2025-11）。对长期成长投资、耐心资本理念感兴趣。
+- 解读：Norman 目前是投资新手（起步阶段）。聊投资话题时优先给「先活下来、资产配置、别追涨杀跌」的底层框架，再谈进阶理念；柏基式「押注下一个特斯拉」的打法不适合新手直接照搬。
 
 ## 每日对话摘要规则
 - 路径：~/.workbuddy/daily-summaries/YYYY-MM-DD.md
